@@ -25,6 +25,8 @@ library(coefplot)
 coefplot(income1)
 
 
+
+
 #Interpreting the coefficients from a logistic regression necessitates taking the inverse logit.
 
 invlogit <- function(x)
@@ -97,3 +99,97 @@ ag2 <- coxph(Surv(start, stop, event) ~ strata(rx) + number + size + enum + clus
 plot(survfit(ag1), conf.int = TRUE)
 plot(survfit(ag2), conf.int = TRUE, col=1:2)
 legend("bottomleft", legend=c(1, 2), lty=1, col=1:2, text.col=1:2, title="rx")
+
+#Evaluating models
+
+housing <- read.table("http://www.jaredlander.com/data/housing.csv",
+                      sep = ",", header = TRUE,stringsAsFactors = FALSE)
+
+names(housing) <- c("Neighborhood", "Class", "Units", "YearBuilt",
+"SqFt", "Income", "IncomePerSqFt", "Expense",
+"ExpensePerSqFt", "NetIncome", "Value",
+"ValuePerSqFt", "Boro")
+
+head(housing)
+
+housing <- housing[housing$Units < 1000, ]
+
+head(housing)
+
+house1 <- lm(ValuePerSqFt ~ Units + SqFt + Boro, data = housing)
+summary(house1)
+
+library(coefplot)
+coefplot(house1)
+
+
+#For linear regression, three important residual plots are: fitted values against residuals, Q-Q plots and the histogram of the residuals. The first is easy enough with ggplot2. Fortunately, ggplot2 has a handy trick for dealing with lm models. We can use the model as the data source and ggplot2 “fortifies” it, creating new columns, for easy plotting.
+
+library(ggplot2)
+
+head(fortify(house1))
+h1 <- ggplot(aes(x=.fitted, y=.resid), data = house1) +
+geom_point() +
+geom_hline(yintercept = 0) +
+geom_smooth(se = FALSE) +
+labs(x="Fitted Values", y="Residuals")
+h1
+h1 + geom_point(aes(color=Boro))
+
+plot(house1, which=2)
+
+ggplot(house1, aes(sample=.stdresid)) + stat_qq() + geom_abline()
+
+#poor fit at extremes show model is poor
+
+ggplot(house1, aes(x=.resid)) + geom_histogram()
+
+#Residuals not normally distributed
+names(housing)
+house2 <- lm(ValuePerSqFt ~ Units *SqFt + Boro, data = housing)
+house3 <- lm(ValuePerSqFt ~ Units + SqFt * Boro + Class, data = housing)
+house4 <- lm(ValuePerSqFt ~ Units + SqFt * Boro + SqFt*Class, data = housing)
+house5 <- lm(ValuePerSqFt ~ Boro + Class, data = housing)
+
+
+multiplot(house1, house2, house3, house4, house5)
+
+#Anova is sort of a cheater approach
+
+anova(house1, house2, house3, house4, house5)
+
+#This shows that the fourth model, house4, has the lowest RSS, meaning it is the best model of the bunch. The problem with RSS is
+#that it always improves when an additional variable is added to the model. This can lead to excessive model complexity and overfitting. Another metric, which penalizes model complexity, is the Akaike Information Criterion (AIC). As with RSS, the model with the lowest AIC—even negative values—is considered optimal. The BIC (Bayesian Information Criterion) is a similar measure where, once again, lower is better.
+
+
+#The AIC and BIC for our models are calculated using the AIC and BIC functions, respectively.
+
+AIC(house1, house2, house3, house4, house5)
+
+#AIC of house4 is lowest, so that is the best of these 5 models
+
+BIC(house1, house2, house3, house4, house5)
+
+#Same with BIC
+
+#When called on glm models, anova returns the deviance of the model, which is another measure of error. The general rule of thumb—according to Andrew Gelman—is that for every added variable in the model, the deviance should drop by two. For categorical (factor)
+#variables, the deviance should drop by two for each level. To illustrate we make a binary variable out of ValuePerSqFt and fit a few logistic regression models.
+
+housing$HighValue <- housing$ValuePerSqFt >= 150
+ high1 <- glm(HighValue ~ Units + SqFt + Boro, data = housing, family = binomial(link = "logit"))
+ 
+ high2 <- glm(HighValue ~ Units * SqFt + Boro, data = housing, family = binomial(link = "logit"))
+ 
+ high3 <- glm(HighValue ~ Units + SqFt * Boro + Class, data = housing, family = binomial(link = "logit"))
+
+ high4 <- glm(HighValue ~ Units + SqFt * Boro + SqFt *Class, data = housing, family = binomial(link = "logit")) 
+ 
+
+ high5 <- glm(HighValue ~ Boro + Class,  data = housing, family = binomial(link = "logit")) 
+
+anova(high1, high2, high3, high4, high5) 
+
+
+AIC(high1, high2, high3, high4, high5)
+
+BIC(high1, high2, high3, high4, high5)
